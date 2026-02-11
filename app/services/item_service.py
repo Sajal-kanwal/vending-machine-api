@@ -12,7 +12,7 @@ def add_item_to_slot(db: Session, slot_id: str, data: ItemCreate) -> Item:
         raise ValueError("slot_not_found")
     if slot.current_item_count + data.quantity > slot.capacity:
         raise ValueError("capacity_exceeded")
-    if slot.current_item_count + data.quantity < settings.MAX_ITEMS_PER_SLOT:
+    if slot.current_item_count + data.quantity > settings.MAX_ITEMS_PER_SLOT:
         raise ValueError("capacity_exceeded")
     item = Item(
         name=data.name,
@@ -32,14 +32,25 @@ def bulk_add_items(db: Session, slot_id: str, entries: list[ItemBulkEntry]) -> i
     if not slot:
         raise ValueError("slot_not_found")
     added = 0
+    
+    # Calculate total quantity to add first to check capacity
+    total_quantity = sum(e.quantity for e in entries if e.quantity > 0)
+    
+    if slot.current_item_count + total_quantity > slot.capacity:
+        raise ValueError("capacity_exceeded")
+    if slot.current_item_count + total_quantity > settings.MAX_ITEMS_PER_SLOT:
+        raise ValueError("capacity_exceeded")
+
     for e in entries:
         if e.quantity <= 0:
             continue
         item = Item(name=e.name, price=e.price, slot_id=slot_id, quantity=e.quantity)
         db.add(item)
         added += 1
-        db.commit()
-        time.sleep(0.05)  # demo: widens race window vs purchase
+    
+    slot.current_item_count += total_quantity
+    db.commit()
+    # time.sleep removed to fix race condition and ensure atomicity
     return added
 
 
@@ -58,9 +69,8 @@ def update_item_price(db: Session, item_id: str, price: int) -> None:
     item = get_item_by_id(db, item_id)
     if not item:
         raise ValueError("item_not_found")
-    prev_updated = item.updated_at
     item.price = price
-    item.updated_at = prev_updated
+    # item.updated_at = prev_updated # Removed to allow timestamp update
     db.commit()
 
 

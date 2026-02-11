@@ -31,7 +31,7 @@ class Item(Base):
     id = Column(CHAR(36), primary_key=True, default=generate_uuid)
     name = Column(String(255), nullable=False)
     price = Column(Integer, nullable=False)
-    slot_id = Column(CHAR(36), ForeignKey("slots.id", ondelete="SET NULL"), nullable=True)
+    slot_id = Column(CHAR(36), ForeignKey("slots.id", ondelete="CASCADE"), nullable=True)
     quantity = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
