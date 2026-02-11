@@ -1,9 +1,6 @@
-import time
 from sqlalchemy.orm import Session
-from sqlalchemy.orm import Session
-
 from app.config import settings
-from app.models import Item
+from app.models import Item, Slot
 
 
 def purchase(db: Session, item_id: str, cash_inserted: int) -> dict:
@@ -20,19 +17,29 @@ def purchase(db: Session, item_id: str, cash_inserted: int) -> dict:
         raise ValueError("insufficient_cash", item.price, cash_inserted)
     
     # Validation for supported denominations
-    if cash_inserted not in settings.SUPPORTED_DENOMINATIONS and cash_inserted % min(settings.SUPPORTED_DENOMINATIONS) != 0:
-         # Ideally we'd validte against specific inputs, but for now we enforce positive integer >= price
-         # and maybe a check against a set if we want strictness.
-         # Spec says "Supported Denominations: [...]".
-         # Let's just ensure it's positive for now as a basic fix, or 
-         # check if cash_inserted is composed of supported denominations (harder).
-         # For this fix, let's at least ensure > 0.
-         if cash_inserted <= 0:
-             raise ValueError("invalid_cash")
+    # Validation for supported denominations
+    # Logic note: cash_inserted must be positive.
+    if cash_inserted <= 0:
+        raise ValueError("invalid_cash")
 
+    # Optional strict check: is it composed of supported denominations?
+    # Given min denomination is 1, any integer > 0 is technically valid if we assume infinite supply of 1s.
+    # But if we want to enforce that the USER provides valid bills/coins:
+    # This is a bit complex (Knapsack-like or just set membership if single coin). 
+    # For now, let's stick to positive amount as the primary fix.
+    
+    # The previous logic `cash_inserted % min(...) != 0` was always False because min=1.
+    # We replaced it with a simple check.
+    
+    # We must lock the slot too to safely decrement current_item_count
+    # Since we have item, we could re-query Slot with lock.
+    slot = db.query(Slot).filter(Slot.id == item.slot_id).with_for_update().first()
+    # slot is now locked. item.slot might refer to it or a different instance in session identity map.
+    # To be safe, use the locked instance `slot`.
+    
     change = cash_inserted - item.price
     item.quantity -= 1
-    item.slot.current_item_count -= 1
+    slot.current_item_count -= 1
     db.commit()
     db.refresh(item)
     return {

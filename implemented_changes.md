@@ -51,13 +51,25 @@ This document details the bug fixes and improvements implemented in the Vending 
 *   **Change**: Added a check that `cash_inserted > 0`.
 *   **Reasoning**: Basic sanity check. While full denomination validation wasn't strictly enforced, ensuring positive cash is a minimum requirement.
 
-## 4. Data Models (`app/models.py`)
+## 4. Configuration & Models
 
-### A. Cascade Delete
+### A. Supported Denominations
+*   **Change**: Updated `SUPPORTED_DENOMINATIONS` in `app/config.py` to include `1` and `2`.
+    *   **Previous**: `[5, 10, 20, 50, 100]`
+    *   **New**: `[1, 2, 5, 10, 20, 50, 100]`
+*   **Reasoning**: Alignment with `api-specifications.md` which lists `[1, 2, 5, 10, 20, 50, 100]`. This ensures low-value transactions or change breakdown works as expected for all defined values.
+
+### B. Cascade Delete (`app/models.py`)
 *   **Change**: Updated `Item.slot_id` foreign key to `ondelete="CASCADE"`.
     *   **Previous**: `ondelete="SET NULL"`.
     *   **New**: If a slot is deleted (and the application logic allows it), the items within it are also deleted.
 *   **Reasoning**: Aligns the database schema with the physical reality (removing a tray removes its contents) and prevents orphaned item records with `slot_id=NULL`.
 
-## Summary
-The API is now robust against high-concurrency scenarios, enforces data integrity rules strictly, and adheres to standard database performance practices. All changes were verified with a custom script `verify_fixes.py`.
+### C. Schema Consistency (`app/schemas.py`)
+*   **Change**: Updated `ItemPriceUpdate` validation from `price > 0` (`gt=0`) to `price >= 0` (`ge=0`).
+*   **Reasoning**: `ItemCreate` allows price of 0 (free items), so updates should also allow it. Fixed inconsistency.
+
+### D. Slot Count Race Condition (`app/services/purchase_service.py`)
+*   **Change**: Added explicit row locking for the `Slot` during a purchase.
+    *   **Logic**: `slot = db.query(Slot).filter(Slot.id == item.slot_id).with_for_update().first()`
+*   **Reasoning**: While `Item` was locked, two concurrent purchases of *different* items in the *same* slot could race to update `Slot.current_item_count`. Locking the slot ensures the count decrements are serialized safely.

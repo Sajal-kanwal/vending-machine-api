@@ -47,7 +47,7 @@ class ItemDetailResponse(ItemResponse):
 
 
 class ItemPriceUpdate(BaseModel):
-    price: int = Field(..., gt=0)
+    price: int = Field(..., ge=0)
 
 
 # --- Slot full view ---

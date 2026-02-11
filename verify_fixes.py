@@ -7,8 +7,8 @@ BASE_URL = "http://127.0.0.1:8000"
 async def test_slot_management():
     print("\n--- Testing Slot Management ---")
     async with httpx.AsyncClient(base_url=BASE_URL) as client:
-        print("Creating slot A100...")
-        resp = await client.post("/slots", json={"code": "A100", "capacity": 10})
+        print("Creating slot A101...")
+        resp = await client.post("/slots", json={"code": "A101", "capacity": 10})
         if resp.status_code == 201:
             slot_id = resp.json()["id"]
             print(f"Slot created: {slot_id}")
@@ -137,7 +137,35 @@ async def test_atomicity():
         # Cleanup
         await client.delete(f"/slots/{slot_id}")
 
+
+async def test_schema():
+    print("\n--- Testing Schema Consistency ---")
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        # Create Slot and Item
+        resp = await client.post("/slots", json={"code": "SCHEMA_TEST", "capacity": 10})
+        if resp.status_code != 201:
+            print("Failed to setup slot for schema test.")
+            return
+        slot_id = resp.json()["id"]
+
+        resp = await client.post(f"/slots/{slot_id}/items", json={"name": "FreeItem", "price": 0, "quantity": 1})
+        item_id = resp.json()["id"]
+
+        # Try to update price to 0 (should be allowed now)
+        print("Updating price to 0...")
+        resp = await client.patch(f"/items/{item_id}/price", json={"price": 0})
+        if resp.status_code == 200:
+            print("PASSED: Price updated to 0.")
+        else:
+            print(f"FAILED: Price update blocked. Status: {resp.status_code}")
+        
+        # Cleanup
+        await client.delete(f"/slots/{slot_id}/items")
+        await client.delete(f"/slots/{slot_id}")
+
 if __name__ == "__main__":
     asyncio.run(test_slot_management())
     asyncio.run(test_atomicity())
     asyncio.run(test_concurrency())
+    asyncio.run(test_schema())
+
